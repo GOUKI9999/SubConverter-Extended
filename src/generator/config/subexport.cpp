@@ -2051,10 +2051,17 @@ static void proxyToClashImpl(std::vector<Proxy> &nodes, YAML::Node &yamlnode,
       std::string regex_pattern;
       bool has_provider_match = false;
       YAML::Node provider_use_node;
+      bool collect_plain_regex = false;
 
       for (const auto &proxy : x.Proxies) {
         // 如果不是以 [] 开头，则认为是正则表达式
         if (isProviderRegexRule(proxy)) {
+          // 已命中普通正则：按原顺序追加后续普通正则，跳过 !! 匹配语法
+          if (collect_plain_regex) {
+            if (!startsWith(proxy, "!!"))
+              regex_pattern += "`" + proxy;
+            continue;
+          }
           std::string groupid_target, groupid_filter;
           if (parseProviderGroupIdMatcher(proxy, groupid_target,
                                           groupid_filter)) {
@@ -2084,7 +2091,11 @@ static void proxyToClashImpl(std::vector<Proxy> &nodes, YAML::Node &yamlnode,
 
           has_regex = true;
           regex_pattern = proxy;
-          break; // 找到第一个正则就够了
+          // Mihomo 按 ` 拆分 filter 并按段顺序匹配节点，多段正则用 ` 连接后
+          // 与原版 subconverter 逐段匹配的分组成员和顺序一致。
+          collect_plain_regex = !startsWith(proxy, "!!");
+          if (!collect_plain_regex)
+            break;
         }
       }
 
